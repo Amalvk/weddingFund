@@ -36,6 +36,8 @@ function App() {
     deleting: null, // stores the id of the item being deleted
     deletingAll: false
   })
+  const [nameSuggestions, setNameSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
 
   // Fetch payments from Firebase
   useEffect(() => {
@@ -175,6 +177,8 @@ function App() {
         amountReceived: '',
         amountGiven: ''
       })
+      setNameSuggestions([])
+      setShowSuggestions(false)
       fetchPayments()
     } catch (error) {
       console.error('Error adding payment:', error)
@@ -272,6 +276,49 @@ function App() {
     )
   })
 
+  // Handle name input change and show suggestions
+  const handleNameChange = (e) => {
+    const value = e.target.value
+    setFormData({ ...formData, name: value })
+
+    if (value.trim().length > 0) {
+      // Get matching payments with name and place
+      const matchingPayments = payments
+        .filter(payment => 
+          payment.name.toLowerCase().includes(value.toLowerCase()) &&
+          payment.name.toLowerCase() !== value.toLowerCase()
+        )
+        .reduce((acc, payment) => {
+          // Use name as key to get unique entries, keeping the first occurrence
+          if (!acc.find(item => item.name.toLowerCase() === payment.name.toLowerCase())) {
+            acc.push({
+              name: payment.name,
+              place: payment.place || ''
+            })
+          }
+          return acc
+        }, [])
+        .slice(0, 5) // Limit to 5 suggestions
+
+      setNameSuggestions(matchingPayments)
+      setShowSuggestions(matchingPayments.length > 0)
+    } else {
+      setNameSuggestions([])
+      setShowSuggestions(false)
+    }
+  }
+
+  // Handle suggestion selection
+  const handleSuggestionSelect = (suggestion) => {
+    setFormData({ 
+      ...formData, 
+      name: suggestion.name,
+      place: suggestion.place || formData.place
+    })
+    setNameSuggestions([])
+    setShowSuggestions(false)
+  }
+
   return (
     <div className="app-container">
       <h1 className="app-title">Wedding Payment Management</h1>
@@ -304,15 +351,44 @@ function App() {
         <h2>Add Payment Entry</h2>
         <form onSubmit={handleSubmit} className="payment-form">
           <div className="form-row">
-            <div className="form-group">
+            <div className="form-group name-input-group">
               <label>Name *</label>
-              <input
-                type="text"
-                placeholder="Enter name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+              <div className="name-input-wrapper">
+                <input
+                  type="text"
+                  placeholder="Enter name"
+                  value={formData.name}
+                  onChange={handleNameChange}
+                  onFocus={() => {
+                    if (nameSuggestions.length > 0) {
+                      setShowSuggestions(true)
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay hiding suggestions to allow click on suggestion
+                    setTimeout(() => setShowSuggestions(false), 200)
+                  }}
+                  required
+                />
+                {showSuggestions && nameSuggestions.length > 0 && (
+                  <div className="name-suggestions-dropdown">
+                    <div className="suggestions-header">Similar names found:</div>
+                    {nameSuggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        className="suggestion-item"
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                      >
+                        <div className="suggestion-name">{suggestion.name}</div>
+                        {suggestion.place && (
+                          <div className="suggestion-place">{suggestion.place}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="form-group">
               <label>Place/Home</label>
@@ -353,31 +429,29 @@ function App() {
         </form>
       </div>
 
-      {/* Search Section */}
-      <div className="search-section">
-        <div className="search-box">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <input
-            type="text"
-            placeholder="Search by name or place"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
-
       {/* Payment List Table */}
       <div className="table-section">
         <div className="table-header">
           <h2>Payment List</h2>
-          {payments.length > 0 && (
-            <button onClick={handleDeleteAll} className="delete-all-button" disabled={loading.deletingAll}>
-              {loading.deletingAll ? 'Deleting...' : 'Delete All'}
-            </button>
-          )}
+          <div className="table-header-actions">
+            <div className="search-box">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by name or place"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {payments.length > 0 && (
+              <button onClick={handleDeleteAll} className="delete-all-button" disabled={loading.deletingAll}>
+                {loading.deletingAll ? 'Deleting...' : 'Delete All'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="table-container">
           <table className="payment-table">
