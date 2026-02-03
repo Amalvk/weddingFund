@@ -15,7 +15,7 @@
 
 /* Upload Section */
 .upload-section {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #c2e2cc 100%);
   padding: 25px;
   border-radius: 12px;
   margin-bottom: 30px;
@@ -27,7 +27,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: #22c55e;
+  background: #3fc26f;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -40,14 +40,14 @@
 }
 
 .upload-button:hover {
-  background: #16a34a;
+  background: #6bca8f;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .upload-instruction {
   margin-top: 15px;
-  color: white;
+  color: rgb(0, 0, 0);
   font-size: 14px;
   opacity: 0.9;
 }
@@ -106,10 +106,10 @@
 }
 
 .submit-button {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  color: white;
-  padding: 14px 28px;
-  border: none;
+  background: white;
+  color: #22c55e;
+  padding: 8px 28px;
+  border: 2px solid #3fc26f;
   border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
@@ -120,6 +120,8 @@
 }
 
 .submit-button:hover {
+  background: #3fc26f;
+  color: white;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
@@ -179,10 +181,10 @@
 }
 
 .delete-all-button {
-  background: #ef4444;
-  color: white;
+  background: white;
+  color: #ef4444;
   padding: 10px 20px;
-  border: none;
+  border: 2px solid #ef4444;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -191,7 +193,8 @@
 }
 
 .delete-all-button:hover {
-  background: #dc2626;
+  background: #ef4444;
+  color: white;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
 }
@@ -207,7 +210,7 @@
 }
 
 .payment-table thead {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, #63dd90 0%, #3fc26f 100%);
   color: white;
 }
 
@@ -221,6 +224,10 @@
 .payment-table tbody tr {
   border-bottom: 1px solid #e5e7eb;
   transition: background-color 0.2s ease;
+}
+
+.payment-table tbody tr:nth-child(even) {
+  background-color: #f0fdf4;
 }
 
 .payment-table tbody tr:hover {
@@ -260,17 +267,14 @@
 
 .balance-red {
   color: #dc2626;
-  background-color: #fee2e2;
 }
 
 .balance-green {
   color: #16a34a;
-  background-color: #dcfce7;
 }
 
 .balance-blue {
   color: #2563eb;
-  background-color: #dbeafe;
 }
 
 .action-button {

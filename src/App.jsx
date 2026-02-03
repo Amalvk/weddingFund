@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore'
 import { db } from './firebase'
 import * as XLSX from 'xlsx'
+import Modal from './components/Modal'
 import './App.css'
 
 function App() {
@@ -20,11 +21,42 @@ function App() {
     amountReceived: '',
     amountGiven: ''
   })
+  const [modal, setModal] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: '',
+    onConfirm: null,
+    showCancel: false
+  })
 
   // Fetch payments from Firebase
   useEffect(() => {
     fetchPayments()
   }, [])
+
+  // Modal helper functions
+  const showModal = (type, title, message, onConfirm = null, showCancel = false) => {
+    setModal({
+      isOpen: true,
+      type,
+      title,
+      message,
+      onConfirm,
+      showCancel
+    })
+  }
+
+  const closeModal = () => {
+    setModal({
+      isOpen: false,
+      type: 'info',
+      title: '',
+      message: '',
+      onConfirm: null,
+      showCancel: false
+    })
+  }
 
   const fetchPayments = async () => {
     try {
@@ -38,7 +70,7 @@ function App() {
       setPayments(paymentsData)
     } catch (error) {
       console.error('Error fetching payments:', error)
-      alert('Error fetching payments. Please try again.')
+      showModal('error', 'Error', 'Error fetching payments. Please try again.')
     }
   }
 
@@ -92,12 +124,12 @@ function App() {
         })
 
         await Promise.all(promises.filter(p => p !== null))
-        alert('Excel data uploaded successfully!')
+        showModal('success', 'Success', 'Excel data uploaded successfully!')
         fetchPayments()
         event.target.value = '' // Reset file input
       } catch (error) {
         console.error('Error processing Excel file:', error)
-        alert('Error processing Excel file. Please check the format.')
+        showModal('error', 'Error', 'Error processing Excel file. Please check the format.')
       }
     }
     reader.readAsArrayBuffer(file)
@@ -108,7 +140,7 @@ function App() {
     e.preventDefault()
     
     if (!formData.name || !formData.amountReceived) {
-      alert('Name and Amount Received are required!')
+      showModal('warning', 'Validation Error', 'Name and Amount Received are required!')
       return
     }
 
@@ -122,7 +154,7 @@ function App() {
       }
 
       await addDoc(collection(db, 'payments'), paymentData)
-      alert('Payment added successfully!')
+      showModal('success', 'Success', 'Payment added successfully!')
       setFormData({
         name: '',
         place: '',
@@ -132,7 +164,7 @@ function App() {
       fetchPayments()
     } catch (error) {
       console.error('Error adding payment:', error)
-      alert('Error adding payment. Please try again.')
+      showModal('error', 'Error', 'Error adding payment. Please try again.')
     }
   }
 
@@ -157,42 +189,54 @@ function App() {
         amountReceived: parseFloat(editData.amountReceived) || 0,
         amountGiven: parseFloat(editData.amountGiven) || 0
       })
-      alert('Payment updated successfully!')
+      showModal('success', 'Success', 'Payment updated successfully!')
       setEditingId(null)
       fetchPayments()
     } catch (error) {
       console.error('Error updating payment:', error)
-      alert('Error updating payment. Please try again.')
+      showModal('error', 'Error', 'Error updating payment. Please try again.')
     }
   }
 
   // Handle delete
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this payment?')) {
-      try {
-        await deleteDoc(doc(db, 'payments', id))
-        alert('Payment deleted successfully!')
-        fetchPayments()
-      } catch (error) {
-        console.error('Error deleting payment:', error)
-        alert('Error deleting payment. Please try again.')
-      }
-    }
+  const handleDelete = (id) => {
+    showModal(
+      'warning',
+      'Confirm Delete',
+      'Are you sure you want to delete this payment?',
+      async () => {
+        try {
+          await deleteDoc(doc(db, 'payments', id))
+          showModal('success', 'Success', 'Payment deleted successfully!')
+          fetchPayments()
+        } catch (error) {
+          console.error('Error deleting payment:', error)
+          showModal('error', 'Error', 'Error deleting payment. Please try again.')
+        }
+      },
+      true
+    )
   }
 
   // Handle delete all
-  const handleDeleteAll = async () => {
-    if (window.confirm('Are you sure you want to delete ALL payments? This action cannot be undone!')) {
-      try {
-        const promises = payments.map(payment => deleteDoc(doc(db, 'payments', payment.id)))
-        await Promise.all(promises)
-        alert('All payments deleted successfully!')
-        fetchPayments()
-      } catch (error) {
-        console.error('Error deleting all payments:', error)
-        alert('Error deleting payments. Please try again.')
-      }
-    }
+  const handleDeleteAll = () => {
+    showModal(
+      'warning',
+      'Confirm Delete All',
+      'Are you sure you want to delete ALL payments? This action cannot be undone!',
+      async () => {
+        try {
+          const promises = payments.map(payment => deleteDoc(doc(db, 'payments', payment.id)))
+          await Promise.all(promises)
+          showModal('success', 'Success', 'All payments deleted successfully!')
+          fetchPayments()
+        } catch (error) {
+          console.error('Error deleting all payments:', error)
+          showModal('error', 'Error', 'Error deleting payments. Please try again.')
+        }
+      },
+      true
+    )
   }
 
   // Filter payments based on search
@@ -419,6 +463,17 @@ function App() {
           </table>
         </div>
       </div>
+
+      {/* Modal Component */}
+      <Modal
+        isOpen={modal.isOpen}
+        onClose={closeModal}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onConfirm={modal.onConfirm}
+        showCancel={modal.showCancel}
+      />
     </div>
   )
 }
