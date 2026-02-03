@@ -39,10 +39,14 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.upload-button:hover {
+.upload-button:hover:not(.loading) {
   background: #6bca8f;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.upload-button.loading {
+  cursor: not-allowed;
 }
 
 .upload-instruction {
@@ -119,11 +123,16 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.submit-button:hover {
+.submit-button:hover:not(:disabled) {
   background: #3fc26f;
   color: white;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.submit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Search Section */
@@ -192,11 +201,16 @@
   transition: all 0.3s ease;
 }
 
-.delete-all-button:hover {
+.delete-all-button:hover:not(:disabled) {
   background: #ef4444;
   color: white;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+}
+
+.delete-all-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .table-container {
@@ -302,8 +316,13 @@
   color: #dc2626;
 }
 
-.delete-button:hover {
+.delete-button:hover:not(:disabled) {
   background-color: #fee2e2;
+}
+
+.delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .save-button {
@@ -314,8 +333,13 @@
   font-weight: 600;
 }
 
-.save-button:hover {
+.save-button:hover:not(:disabled) {
   background: #16a34a;
+}
+
+.save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .cancel-button {

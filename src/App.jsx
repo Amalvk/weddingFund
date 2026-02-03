@@ -29,6 +29,13 @@ function App() {
     onConfirm: null,
     showCancel: false
   })
+  const [loading, setLoading] = useState({
+    uploading: false,
+    submitting: false,
+    saving: false,
+    deleting: null, // stores the id of the item being deleted
+    deletingAll: false
+  })
 
   // Fetch payments from Firebase
   useEffect(() => {
@@ -98,6 +105,8 @@ function App() {
     const file = event.target.files[0]
     if (!file) return
 
+    setLoading({ ...loading, uploading: true })
+
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
@@ -124,11 +133,13 @@ function App() {
         })
 
         await Promise.all(promises.filter(p => p !== null))
+        setLoading({ ...loading, uploading: false })
         showModal('success', 'Success', 'Excel data uploaded successfully!')
         fetchPayments()
         event.target.value = '' // Reset file input
       } catch (error) {
         console.error('Error processing Excel file:', error)
+        setLoading({ ...loading, uploading: false })
         showModal('error', 'Error', 'Error processing Excel file. Please check the format.')
       }
     }
@@ -144,6 +155,8 @@ function App() {
       return
     }
 
+    setLoading({ ...loading, submitting: true })
+
     try {
       const paymentData = {
         name: formData.name,
@@ -154,6 +167,7 @@ function App() {
       }
 
       await addDoc(collection(db, 'payments'), paymentData)
+      setLoading({ ...loading, submitting: false })
       showModal('success', 'Success', 'Payment added successfully!')
       setFormData({
         name: '',
@@ -164,6 +178,7 @@ function App() {
       fetchPayments()
     } catch (error) {
       console.error('Error adding payment:', error)
+      setLoading({ ...loading, submitting: false })
       showModal('error', 'Error', 'Error adding payment. Please try again.')
     }
   }
@@ -181,6 +196,7 @@ function App() {
 
   // Handle update
   const handleUpdate = async () => {
+    setLoading({ ...loading, saving: true })
     try {
       const paymentRef = doc(db, 'payments', editingId)
       await updateDoc(paymentRef, {
@@ -189,11 +205,13 @@ function App() {
         amountReceived: parseFloat(editData.amountReceived) || 0,
         amountGiven: parseFloat(editData.amountGiven) || 0
       })
+      setLoading({ ...loading, saving: false })
       showModal('success', 'Success', 'Payment updated successfully!')
       setEditingId(null)
       fetchPayments()
     } catch (error) {
       console.error('Error updating payment:', error)
+      setLoading({ ...loading, saving: false })
       showModal('error', 'Error', 'Error updating payment. Please try again.')
     }
   }
@@ -205,12 +223,15 @@ function App() {
       'Confirm Delete',
       'Are you sure you want to delete this payment?',
       async () => {
+        setLoading({ ...loading, deleting: id })
         try {
           await deleteDoc(doc(db, 'payments', id))
+          setLoading({ ...loading, deleting: null })
           showModal('success', 'Success', 'Payment deleted successfully!')
           fetchPayments()
         } catch (error) {
           console.error('Error deleting payment:', error)
+          setLoading({ ...loading, deleting: null })
           showModal('error', 'Error', 'Error deleting payment. Please try again.')
         }
       },
@@ -225,13 +246,16 @@ function App() {
       'Confirm Delete All',
       'Are you sure you want to delete ALL payments? This action cannot be undone!',
       async () => {
+        setLoading({ ...loading, deletingAll: true })
         try {
           const promises = payments.map(payment => deleteDoc(doc(db, 'payments', payment.id)))
           await Promise.all(promises)
+          setLoading({ ...loading, deletingAll: false })
           showModal('success', 'Success', 'All payments deleted successfully!')
           fetchPayments()
         } catch (error) {
           console.error('Error deleting all payments:', error)
+          setLoading({ ...loading, deletingAll: false })
           showModal('error', 'Error', 'Error deleting payments. Please try again.')
         }
       },
@@ -254,19 +278,20 @@ function App() {
 
       {/* Excel Upload Section */}
       <div className="upload-section">
-        <label htmlFor="excel-upload" className="upload-button">
+        <label htmlFor="excel-upload" className={`upload-button ${loading.uploading ? 'loading' : ''}`} style={{ opacity: loading.uploading ? 0.7 : 1, cursor: loading.uploading ? 'not-allowed' : 'pointer' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          Upload Excel File
+          {loading.uploading ? 'Uploading...' : 'Upload Excel File'}
         </label>
         <input
           id="excel-upload"
           type="file"
           accept=".xlsx,.xls"
           onChange={handleExcelUpload}
+          disabled={loading.uploading}
           style={{ display: 'none' }}
         />
         <p className="upload-instruction">
@@ -322,7 +347,9 @@ function App() {
               />
             </div>
           </div>
-          <button type="submit" className="submit-button">Submit</button>
+          <button type="submit" className="submit-button" disabled={loading.submitting}>
+            {loading.submitting ? 'Submitting...' : 'Submit'}
+          </button>
         </form>
       </div>
 
@@ -347,8 +374,8 @@ function App() {
         <div className="table-header">
           <h2>Payment List</h2>
           {payments.length > 0 && (
-            <button onClick={handleDeleteAll} className="delete-all-button">
-              Delete All
+            <button onClick={handleDeleteAll} className="delete-all-button" disabled={loading.deletingAll}>
+              {loading.deletingAll ? 'Deleting...' : 'Delete All'}
             </button>
           )}
         </div>
@@ -419,8 +446,10 @@ function App() {
                           </span>
                         </td>
                         <td>
-                          <button onClick={handleUpdate} className="action-button save-button">Save</button>
-                          <button onClick={() => setEditingId(null)} className="action-button cancel-button">Cancel</button>
+                          <button onClick={handleUpdate} className="action-button save-button" disabled={loading.saving}>
+                            {loading.saving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="action-button cancel-button" disabled={loading.saving}>Cancel</button>
                         </td>
                       </tr>
                     )
@@ -448,11 +477,20 @@ function App() {
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                           </svg>
                         </button>
-                        <button onClick={() => handleDelete(payment.id)} className="action-button delete-button">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
+                        <button 
+                          onClick={() => handleDelete(payment.id)} 
+                          className="action-button delete-button"
+                          disabled={loading.deleting === payment.id || loading.deletingAll}
+                          title={loading.deleting === payment.id ? 'Deleting...' : 'Delete'}
+                        >
+                          {loading.deleting === payment.id ? (
+                            <span style={{ fontSize: '12px' }}>Deleting...</span>
+                          ) : (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6"></polyline>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                          )}
                         </button>
                       </td>
                     </tr>
