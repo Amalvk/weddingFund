@@ -319,6 +319,40 @@ function App() {
     setShowSuggestions(false)
   }
 
+  // Handle Excel export
+  const handleExcelExport = () => {
+    try {
+      // Prepare data for export
+      const exportData = filteredPayments.map((payment, index) => {
+        const balance = calculateBalance(payment.amountReceived, payment.amountGiven)
+        return {
+          'S.No': index + 1,
+          'Name': payment.name,
+          'Place/Home': payment.place || '',
+          'Amount Received': parseFloat(payment.amountReceived || 0).toFixed(2),
+          'Amount Given': parseFloat(payment.amountGiven || 0).toFixed(2),
+          'Balance': parseFloat(balance).toFixed(2)
+        }
+      })
+
+      // Create workbook and worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Payments')
+
+      // Generate filename with current date
+      const date = new Date().toISOString().split('T')[0]
+      const filename = `wedding_payments_${date}.xlsx`
+
+      // Write and download file
+      XLSX.writeFile(workbook, filename)
+      showModal('success', 'Success', 'Excel file exported successfully!')
+    } catch (error) {
+      console.error('Error exporting Excel file:', error)
+      showModal('error', 'Error', 'Error exporting Excel file. Please try again.')
+    }
+  }
+
   return (
     <div className="app-container">
       <h1 className="app-title">Wedding Payment Management</h1>
@@ -446,6 +480,16 @@ function App() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            {filteredPayments.length > 0 && (
+              <button onClick={handleExcelExport} className="export-button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Export to Excel
+              </button>
+            )}
             {payments.length > 0 && (
               <button onClick={handleDeleteAll} className="delete-all-button" disabled={loading.deletingAll}>
                 {loading.deletingAll ? 'Deleting...' : 'Delete All'}
