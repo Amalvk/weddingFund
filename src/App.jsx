@@ -38,6 +38,7 @@ function App() {
   })
   const [nameSuggestions, setNameSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isFormExpanded, setIsFormExpanded] = useState(false)
 
   // Fetch payments from Firebase
   useEffect(() => {
@@ -69,14 +70,23 @@ function App() {
 
   const fetchPayments = async () => {
     try {
-      const q = query(collection(db, 'payments'), orderBy('createdAt', 'desc'))
-      const querySnapshot = await getDocs(q)
-      const paymentsData = querySnapshot.docs.map((doc, index) => ({
+      const querySnapshot = await getDocs(collection(db, 'payments'))
+      const paymentsData = querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        sno: index + 1,
         ...doc.data()
       }))
-      setPayments(paymentsData)
+      // Sort by name in ascending order (case-insensitive)
+      paymentsData.sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase()
+        const nameB = (b.name || '').toLowerCase()
+        return nameA.localeCompare(nameB)
+      })
+      // Update sno after sorting
+      const sortedPayments = paymentsData.map((payment, index) => ({
+        ...payment,
+        sno: index + 1
+      }))
+      setPayments(sortedPayments)
     } catch (error) {
       console.error('Error fetching payments:', error)
       showModal('error', 'Error', 'Error fetching payments. Please try again.')
@@ -100,6 +110,12 @@ function App() {
   // Format balance for display (show absolute value for negative balances)
   const formatBalance = (balance) => {
     return Math.abs(balance).toFixed(2)
+  }
+
+  // Capitalize first letter of a string
+  const capitalizeFirst = (str) => {
+    if (!str) return ''
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
   }
 
   // Handle Excel file upload
@@ -381,9 +397,39 @@ function App() {
       </div>
 
       {/* Manual Input Form */}
-      <div className="form-section">
-        <h2>Add Payment Entry</h2>
-        <form onSubmit={handleSubmit} className="payment-form">
+      <div className={`form-section ${!isFormExpanded ? 'collapsed' : ''}`}>
+        <div className="form-section-header" onClick={() => setIsFormExpanded(!isFormExpanded)}>
+          <div className="form-section-title">
+            <h2>Add Payment Entry</h2>
+            <div className="plus-icon-circle">
+              <svg 
+                className="plus-icon"
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2"
+              >
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </div>
+          </div>
+          <svg 
+            className={`chevron-icon ${isFormExpanded ? 'expanded' : ''}`}
+            width="24" 
+            height="24" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div className={`form-content-wrapper ${isFormExpanded ? 'expanded' : 'collapsed'}`}>
+          <form onSubmit={handleSubmit} className="payment-form">
           <div className="form-row">
             <div className="form-group name-input-group">
               <label>Name *</label>
@@ -461,6 +507,7 @@ function App() {
             {loading.submitting ? 'Submitting...' : 'Submit'}
           </button>
         </form>
+        </div>
       </div>
 
       {/* Payment List Table */}
@@ -529,7 +576,7 @@ function App() {
                             type="text"
                             value={editData.name}
                             onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                            className="edit-input"
+                            className="edit-input edit-input-wide"
                           />
                         </td>
                         <td>
@@ -537,7 +584,7 @@ function App() {
                             type="text"
                             value={editData.place}
                             onChange={(e) => setEditData({ ...editData, place: e.target.value })}
-                            className="edit-input"
+                            className="edit-input edit-input-wide"
                           />
                         </td>
                         <td>
@@ -564,10 +611,17 @@ function App() {
                           </span>
                         </td>
                         <td>
-                          <button onClick={handleUpdate} className="action-button save-button" disabled={loading.saving}>
-                            {loading.saving ? 'Saving...' : 'Save'}
-                          </button>
-                          <button onClick={() => setEditingId(null)} className="action-button cancel-button" disabled={loading.saving}>Cancel</button>
+                          <div className="edit-actions">
+                            <button onClick={handleUpdate} className="action-button save-button" disabled={loading.saving}>
+                              {loading.saving ? 'Saving...' : 'Save'}
+                            </button>
+                            <button onClick={() => setEditingId(null)} className="action-button cancel-button" disabled={loading.saving}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -579,8 +633,8 @@ function App() {
                   return (
                     <tr key={payment.id}>
                       <td>{index + 1}</td>
-                      <td>{payment.name}</td>
-                      <td>{payment.place || '-'}</td>
+                      <td>{capitalizeFirst(payment.name)}</td>
+                      <td>{payment.place ? capitalizeFirst(payment.place) : '-'}</td>
                       <td>₹{parseFloat(payment.amountReceived || 0).toFixed(2)}</td>
                       <td>₹{parseFloat(payment.amountGiven || 0).toFixed(2)}</td>
                       <td>
