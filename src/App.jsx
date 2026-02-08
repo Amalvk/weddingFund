@@ -70,23 +70,14 @@ function App() {
 
   const fetchPayments = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'payments'))
-      const paymentsData = querySnapshot.docs.map((doc) => ({
+      const q = query(collection(db, 'payments'), orderBy('createdAt', 'desc'))
+      const querySnapshot = await getDocs(q)
+      const paymentsData = querySnapshot.docs.map((doc, index) => ({
         id: doc.id,
+        sno: index + 1,
         ...doc.data()
       }))
-      // Sort by name in ascending order (case-insensitive)
-      paymentsData.sort((a, b) => {
-        const nameA = (a.name || '').toLowerCase()
-        const nameB = (b.name || '').toLowerCase()
-        return nameA.localeCompare(nameB)
-      })
-      // Update sno after sorting
-      const sortedPayments = paymentsData.map((payment, index) => ({
-        ...payment,
-        sno: index + 1
-      }))
-      setPayments(sortedPayments)
+      setPayments(paymentsData)
     } catch (error) {
       console.error('Error fetching payments:', error)
       showModal('error', 'Error', 'Error fetching payments. Please try again.')
