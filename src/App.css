@@ -451,6 +451,51 @@
   color: #374151;
 }
 
+/* Editable cells */
+.editable-cell {
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.editable-cell:hover {
+  background-color: #f0fdf4 !important;
+}
+
+.editable-cell input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  font-family: inherit;
+  color: inherit;
+  outline: 2px solid #22c55e;
+  outline-offset: -2px;
+  border-radius: 4px;
+  cursor: text;
+  user-select: text;
+}
+
+/* Limit width for Name and Place/Home columns */
+.payment-table th:nth-child(2),
+.payment-table td:nth-child(2) {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-table th:nth-child(3),
+.payment-table td:nth-child(3) {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .edit-input {
   padding: 8px;
   border: 2px solid #22c55e;
@@ -461,8 +506,8 @@
 }
 
 .edit-input-wide {
-  max-width: 300px;
-  min-width: 200px;
+  max-width: 150px;
+  min-width: 100px;
 }
 
 .edit-input:focus {
