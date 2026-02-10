@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore'
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { db } from './firebase'
 import * as XLSX from 'xlsx'
 import Modal from './components/Modal'
@@ -12,14 +12,14 @@ function App() {
     name: '',
     place: '',
     amountReceived: '',
-    amountGiven: ''
+    amountReceivable: ''
   })
   const [editingId, setEditingId] = useState(null)
   const [editData, setEditData] = useState({
     name: '',
     place: '',
     amountReceived: '',
-    amountGiven: ''
+    amountReceivable: ''
   })
   const [modal, setModal] = useState({
     isOpen: false,
@@ -39,11 +39,18 @@ function App() {
   const [nameSuggestions, setNameSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [isFormExpanded, setIsFormExpanded] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   // Fetch payments from Firebase
   useEffect(() => {
     fetchPayments()
   }, [])
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   // Modal helper functions
   const showModal = (type, title, message, onConfirm = null, showCancel = false) => {
@@ -70,14 +77,53 @@ function App() {
 
   const fetchPayments = async () => {
     try {
-      const q = query(collection(db, 'payments'), orderBy('createdAt', 'desc'))
-      const querySnapshot = await getDocs(q)
-      const paymentsData = querySnapshot.docs.map((doc, index) => ({
+      const querySnapshot = await getDocs(collection(db, 'payments'))
+      const paymentsData = querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        sno: index + 1,
         ...doc.data()
       }))
-      setPayments(paymentsData)
+      
+      // Sort: Excel entries (with orderIndex) by orderIndex, then manual entries by createdAt
+      paymentsData.sort((a, b) => {
+        // If both have orderIndex, sort by orderIndex
+        if (a.orderIndex !== undefined && b.orderIndex !== undefined) {
+          return a.orderIndex - b.orderIndex
+        }
+        // If only one has orderIndex, prioritize it (Excel entries first)
+        if (a.orderIndex !== undefined) return -1
+        if (b.orderIndex !== undefined) return 1
+        // Both are manual entries, sort by createdAt (oldest first to maintain entry order)
+        const aTime = a.createdAt?.toMillis?.() || a.createdAt?.getTime?.() || (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+        const bTime = b.createdAt?.toMillis?.() || b.createdAt?.getTime?.() || (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+        return aTime - bTime
+      })
+      
+      // Add serial numbers based on original Excel row (orderIndex) or position
+      // For Excel entries, use orderIndex + 1 (original row number)
+      // For manual entries, assign sequential numbers after Excel entries
+      let manualEntryCounter = 0
+      const maxExcelOrderIndex = paymentsData
+        .filter(p => p.orderIndex !== undefined)
+        .reduce((max, p) => Math.max(max, p.orderIndex), -1)
+      
+      const paymentsWithSno = paymentsData.map((payment) => {
+        if (payment.orderIndex !== undefined) {
+          // Excel entry: use original row number (orderIndex + 1)
+          return {
+            ...payment,
+            sno: payment.orderIndex + 1
+          }
+        } else {
+          // Manual entry: assign number after Excel entries
+          manualEntryCounter++
+          return {
+            ...payment,
+            sno: maxExcelOrderIndex + 1 + manualEntryCounter
+          }
+        }
+      })
+      
+      setPayments(paymentsWithSno)
     } catch (error) {
       console.error('Error fetching payments:', error)
       showModal('error', 'Error', 'Error fetching payments. Please try again.')
@@ -85,10 +131,10 @@ function App() {
   }
 
   // Calculate balance
-  const calculateBalance = (received, given) => {
+  const calculateBalance = (received, receivable) => {
     const receivedNum = parseFloat(received) || 0
-    const givenNum = parseFloat(given) || 0
-    return receivedNum - givenNum
+    const receivableNum = parseFloat(receivable) || 0
+    return receivedNum - receivableNum
   }
 
   // Get balance color
@@ -125,23 +171,61 @@ function App() {
         const worksheet = workbook.Sheets[sheetName]
         const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-        // Process and add each row to Firebase
-        const promises = jsonData.map(async (row) => {
-          const paymentData = {
-            name: row.Name || row.name || '',
-            place: row.Place || row.place || row['Place (optional)'] || '',
-            amountReceived: parseFloat(row['Amount Received'] || row['Amount received'] || row.amountReceived || 0) || 0,
-            amountGiven: parseFloat(row['Amount Given'] || row['Amount given'] || row.amountGiven || 0) || 0,
-            createdAt: new Date()
+        // Get the maximum existing orderIndex to continue from there
+        const existingPayments = await getDocs(collection(db, 'payments'))
+        let maxOrderIndex = -1
+        existingPayments.forEach((doc) => {
+          const data = doc.data()
+          if (data.orderIndex !== undefined && data.orderIndex > maxOrderIndex) {
+            maxOrderIndex = data.orderIndex
           }
-
-          if (paymentData.name) {
-            return addDoc(collection(db, 'payments'), paymentData)
-          }
-          return null
         })
 
-        await Promise.all(promises.filter(p => p !== null))
+        // Process and add each row to Firebase using batch writes for speed
+        // Expected columns: Name, Place, Amount Received, Amount Receivable, Balance
+        let orderIndex = maxOrderIndex + 1
+        const baseTimestamp = Date.now()
+        const batchSize = 500 // Firestore batch limit
+        const batches = []
+        let currentBatch = writeBatch(db)
+        let batchCount = 0
+        
+        for (let i = 0; i < jsonData.length; i++) {
+          const row = jsonData[i]
+          const paymentData = {
+            name: row.Name || row.name || '',
+            place: row.Place || row.place || '',
+            amountReceived: parseFloat(row['Amount Received'] || row['Amount received'] || row.amountReceived || 0) || 0,
+            amountReceivable: parseFloat(row['Amount Receivable'] || row['Amount receivable'] || row.amountReceivable || row['Amount Given'] || row['Amount given'] || row.amountGiven || 0) || 0,
+            createdAt: new Date(baseTimestamp + i), // Sequential timestamps to preserve order
+            orderIndex: orderIndex // Preserve Excel row order
+          }
+
+          // Balance column is read but not stored (we calculate it from amountReceived - amountReceivable)
+          // Balance can be used for validation if needed: row.Balance || row.balance || row['Balance']
+
+          if (paymentData.name) {
+            const docRef = doc(collection(db, 'payments'))
+            currentBatch.set(docRef, paymentData)
+            batchCount++
+            orderIndex++
+
+            // Commit batch when it reaches the limit
+            if (batchCount >= batchSize) {
+              batches.push(currentBatch.commit())
+              currentBatch = writeBatch(db)
+              batchCount = 0
+            }
+          }
+        }
+
+        // Commit remaining items in the last batch
+        if (batchCount > 0) {
+          batches.push(currentBatch.commit())
+        }
+
+        // Execute all batches in parallel
+        await Promise.all(batches)
         setLoading({ ...loading, uploading: false })
         showModal('success', 'Success', 'Excel data uploaded successfully!')
         fetchPayments()
@@ -171,7 +255,7 @@ function App() {
         name: formData.name,
         place: formData.place || '',
         amountReceived: parseFloat(formData.amountReceived) || 0,
-        amountGiven: parseFloat(formData.amountGiven) || 0,
+        amountReceivable: parseFloat(formData.amountReceivable) || 0,
         createdAt: new Date()
       }
 
@@ -182,7 +266,7 @@ function App() {
         name: '',
         place: '',
         amountReceived: '',
-        amountGiven: ''
+        amountReceivable: ''
       })
       setNameSuggestions([])
       setShowSuggestions(false)
@@ -201,7 +285,7 @@ function App() {
       name: payment.name,
       place: payment.place || '',
       amountReceived: payment.amountReceived.toString(),
-      amountGiven: payment.amountGiven.toString()
+      amountReceivable: (payment.amountReceivable || payment.amountGiven || 0).toString()
     })
   }
 
@@ -214,7 +298,7 @@ function App() {
         name: editData.name,
         place: editData.place || '',
         amountReceived: parseFloat(editData.amountReceived) || 0,
-        amountGiven: parseFloat(editData.amountGiven) || 0
+        amountReceivable: parseFloat(editData.amountReceivable) || 0
       })
       setLoading({ ...loading, saving: false })
       showModal('success', 'Success', 'Payment updated successfully!')
@@ -259,8 +343,31 @@ function App() {
       async () => {
         setLoading({ ...loading, deletingAll: true })
         try {
-          const promises = payments.map(payment => deleteDoc(doc(db, 'payments', payment.id)))
-          await Promise.all(promises)
+          const batchSize = 500 // Firestore batch limit
+          const batches = []
+          let currentBatch = writeBatch(db)
+          let batchCount = 0
+
+          for (let i = 0; i < payments.length; i++) {
+            const payment = payments[i]
+            currentBatch.delete(doc(db, 'payments', payment.id))
+            batchCount++
+
+            // Commit batch when it reaches the limit
+            if (batchCount >= batchSize) {
+              batches.push(currentBatch.commit())
+              currentBatch = writeBatch(db)
+              batchCount = 0
+            }
+          }
+
+          // Commit remaining items in the last batch
+          if (batchCount > 0) {
+            batches.push(currentBatch.commit())
+          }
+
+          // Execute all batches in parallel
+          await Promise.all(batches)
           setLoading({ ...loading, deletingAll: false })
           showModal('success', 'Success', 'All payments deleted successfully!')
           fetchPayments()
@@ -274,14 +381,41 @@ function App() {
     )
   }
 
+  // Normalize string for search (remove dots and spaces, convert to lowercase)
+  const normalizeForSearch = (str) => {
+    if (!str) return ''
+    return str.toLowerCase().replace(/[.\s]/g, '')
+  }
+
   // Filter payments based on search
   const filteredPayments = payments.filter(payment => {
-    const searchLower = searchTerm.toLowerCase()
+    if (!searchTerm.trim()) return true
+    
+    const normalizedSearch = normalizeForSearch(searchTerm)
+    const normalizedName = normalizeForSearch(payment.name)
+    const normalizedPlace = normalizeForSearch(payment.place)
+    
     return (
-      payment.name.toLowerCase().includes(searchLower) ||
-      (payment.place && payment.place.toLowerCase().includes(searchLower))
+      normalizedName.includes(normalizedSearch) ||
+      normalizedPlace.includes(normalizedSearch)
     )
   })
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredPayments.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedPayments = filteredPayments.slice(startIndex, endIndex)
+
+  // Pagination handlers
+  const handlePageChange = (page) => {
+    setCurrentPage(page)
+    // Scroll to top of table
+    const tableSection = document.querySelector('.table-section')
+    if (tableSection) {
+      tableSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   // Handle name input change and show suggestions
   const handleNameChange = (e) => {
@@ -331,13 +465,13 @@ function App() {
     try {
       // Prepare data for export
       const exportData = filteredPayments.map((payment, index) => {
-        const balance = calculateBalance(payment.amountReceived, payment.amountGiven)
+        const balance = calculateBalance(payment.amountReceived, payment.amountReceivable || payment.amountGiven || 0)
         return {
           'S.No': index + 1,
           'Name': payment.name,
           'Place/Home': payment.place || '',
           'Amount Received': parseFloat(payment.amountReceived || 0).toFixed(2),
-          'Amount Given': parseFloat(payment.amountGiven || 0).toFixed(2),
+          'Amount Receivable': parseFloat(payment.amountReceivable || payment.amountGiven || 0).toFixed(2),
           'Balance': parseFloat(balance).toFixed(2)
         }
       })
@@ -383,7 +517,7 @@ function App() {
           style={{ display: 'none' }}
         />
         <p className="upload-instruction">
-          Upload Excel with columns: Name, Place (optional), Amount Received, Amount Given (optional)
+          Upload Excel with columns: Name, Place, Amount Received, Amount Receivable, Balance
         </p>
       </div>
 
@@ -484,13 +618,13 @@ function App() {
               />
             </div>
             <div className="form-group">
-              <label>Amount Given (Optional)</label>
+              <label>Amount Receivable (Optional)</label>
               <input
                 type="number"
                 step="0.01"
-                placeholder="Enter amount given"
-                value={formData.amountGiven}
-                onChange={(e) => setFormData({ ...formData, amountGiven: e.target.value })}
+                placeholder="Enter amount receivable"
+                value={formData.amountReceivable}
+                onChange={(e) => setFormData({ ...formData, amountReceivable: e.target.value })}
               />
             </div>
           </div>
@@ -543,25 +677,25 @@ function App() {
                 <th>Name</th>
                 <th>Place/Home</th>
                 <th>Amount Received</th>
-                <th>Amount Given</th>
+                <th>Amount Receivable</th>
                 <th>Balance</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredPayments.length === 0 ? (
+              {paginatedPayments.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="no-data">No payments found</td>
                 </tr>
               ) : (
-                filteredPayments.map((payment, index) => {
+                paginatedPayments.map((payment, index) => {
                   if (editingId === payment.id) {
-                    const editBalance = calculateBalance(editData.amountReceived, editData.amountGiven)
+                    const editBalance = calculateBalance(editData.amountReceived, editData.amountReceivable)
                     const editBalanceColor = getBalanceColor(editBalance)
                     
                     return (
                       <tr key={payment.id} className="edit-row">
-                        <td>{index + 1}</td>
+                        <td>{payment.sno}</td>
                         <td>
                           <input
                             type="text"
@@ -591,8 +725,8 @@ function App() {
                           <input
                             type="number"
                             step="0.01"
-                            value={editData.amountGiven}
-                            onChange={(e) => setEditData({ ...editData, amountGiven: e.target.value })}
+                            value={editData.amountReceivable}
+                            onChange={(e) => setEditData({ ...editData, amountReceivable: e.target.value })}
                             className="edit-input"
                           />
                         </td>
@@ -618,16 +752,16 @@ function App() {
                     )
                   }
 
-                  const balance = calculateBalance(payment.amountReceived, payment.amountGiven)
+                  const balance = calculateBalance(payment.amountReceived, payment.amountReceivable || payment.amountGiven || 0)
                   const balanceColor = getBalanceColor(balance)
 
                   return (
                     <tr key={payment.id}>
-                      <td>{index + 1}</td>
+                      <td>{payment.sno}</td>
                       <td>{capitalizeFirst(payment.name)}</td>
                       <td>{payment.place ? capitalizeFirst(payment.place) : '-'}</td>
                       <td>₹{parseFloat(payment.amountReceived || 0).toFixed(2)}</td>
-                      <td>₹{parseFloat(payment.amountGiven || 0).toFixed(2)}</td>
+                      <td>₹{parseFloat(payment.amountReceivable || payment.amountGiven || 0).toFixed(2)}</td>
                       <td>
                         <span className={`balance balance-${balanceColor}`}>
                           ₹{formatBalance(balance)}
@@ -663,6 +797,62 @@ function App() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {filteredPayments.length > itemsPerPage && (
+          <div className="pagination-container">
+            <div className="pagination-info">
+              Showing {startIndex + 1} to {Math.min(endIndex, filteredPayments.length)} of {filteredPayments.length} entries
+            </div>
+            <div className="pagination-controls">
+              <button
+                className="pagination-button"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Previous
+              </button>
+              
+              <div className="pagination-pages">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  // Show first page, last page, current page, and pages around current
+                  if (
+                    page === 1 ||
+                    page === totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <button
+                        key={page}
+                        className={`pagination-page ${currentPage === page ? 'active' : ''}`}
+                        onClick={() => handlePageChange(page)}
+                      >
+                        {page}
+                      </button>
+                    )
+                  } else if (page === currentPage - 2 || page === currentPage + 2) {
+                    return <span key={page} className="pagination-ellipsis">...</span>
+                  }
+                  return null
+                })}
+              </div>
+              
+              <button
+                className="pagination-button"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Component */}

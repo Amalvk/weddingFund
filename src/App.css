@@ -410,7 +410,10 @@
 
 .payment-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 10px;
+  overflow: hidden;
   font-size: 14px;
 }
 
@@ -573,6 +576,100 @@
   font-style: italic;
 }
 
+/* Pagination */
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #e5e7eb;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.pagination-info {
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  color: #374151;
+  padding: 8px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.pagination-button:hover:not(:disabled) {
+  background: #3fc26f;
+  color: white;
+  border-color: #3fc26f;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-page {
+  min-width: 36px;
+  height: 36px;
+  background: white;
+  color: #374151;
+  padding: 0 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pagination-page:hover:not(.active) {
+  background: #f0fdf4;
+  border-color: #3fc26f;
+  color: #3fc26f;
+}
+
+.pagination-page.active {
+  background: #3fc26f;
+  color: white;
+  border-color: #3fc26f;
+  box-shadow: 0 2px 4px rgba(63, 194, 111, 0.3);
+}
+
+.pagination-ellipsis {
+  padding: 0 8px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-container {
@@ -614,5 +711,19 @@
 
   .search-box {
     min-width: 100%;
+  }
+
+  .pagination-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .pagination-info {
+    text-align: center;
   }
 }
